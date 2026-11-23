@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../core/tokens.dart';
 import '../ui/icons.dart';
@@ -50,6 +51,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     final reduce = context.reduceMotion;
     final orbOuter = _iv(80, 720, Motion.out), orbInner = _iv(160, 800, Motion.out), logo = _iv(200, 840, Motion.out);
     final word = _iv(420, 840, Motion.out), tag = _iv(560, 980, Motion.out);
+    final pulse = CurvedAnimation(parent: _c, curve: Interval(reduce ? 0.0 : 760 / 1500, 1.0, curve: Motion.out));
     final bar = CurvedAnimation(parent: _c, curve: Interval(reduce ? 0.0 : 500 / 1500, 1.0, curve: Curves.linear));
 
     Widget scaleFade(Animation<double> a, double from, Widget child) => FadeTransition(
@@ -79,6 +81,21 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                         child: const LogoMark(size: 140),
                       ),
                     ),
+                    // soft pulse ring radiating from the logo once it has landed
+                    if (!reduce)
+                      IgnorePointer(
+                        child: AnimatedBuilder(
+                          animation: pulse,
+                          builder: (_, __) {
+                            final t = pulse.value;
+                            final size = 190 + 110 * t;
+                            return Opacity(
+                              opacity: (math.sin(math.pi * t) * 0.55).clamp(0.0, 1.0).toDouble(),
+                              child: Container(width: size, height: size, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: P.p300, width: 2))),
+                            );
+                          },
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -166,24 +183,50 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   final p = _pages[i];
                   return LayoutBuilder(builder: (ctx, box) {
                     final s = (box.maxHeight * 0.46).clamp(220.0, 300.0).toDouble();
+                    final reduce = context.reduceMotion;
                     return SingleChildScrollView(
                       physics: const NeverScrollableScrollPhysics(),
                       child: ConstrainedBox(
                         constraints: BoxConstraints(minHeight: box.maxHeight),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            _Orb(size: s, page: p),
-                            const SizedBox(height: 28),
-                            Tag(p.tag),
-                            const SizedBox(height: 12),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 28),
-                              child: Semantics(header: true, child: Text(p.title, textAlign: TextAlign.center, style: Tx.h1(c.ink).copyWith(height: 1.12))),
-                            ),
-                            const SizedBox(height: 10),
-                            Padding(padding: const EdgeInsets.symmetric(horizontal: 36), child: Text(p.body, textAlign: TextAlign.center, style: Tx.body(c.ink2).copyWith(height: 1.5))),
-                          ],
+                        // Parallax: the orb travels faster than the page, the text slower and fades out,
+                        // so the three pages read as layers rather than one sliding sheet.
+                        child: AnimatedBuilder(
+                          animation: _pc,
+                          builder: (ctx, _) {
+                            var d = 0.0; // 0 = this page centred, +1 = fully scrolled off to the left
+                            if (!reduce && _pc.hasClients && _pc.position.hasPixels && _pc.position.hasViewportDimension) {
+                              d = (_pc.position.pixels / _pc.position.viewportDimension - i).clamp(-1.0, 1.0).toDouble();
+                            }
+                            final textOpacity = (1 - d.abs() * 1.3).clamp(0.0, 1.0).toDouble();
+                            return Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Transform.translate(
+                                  offset: Offset(-d * 70, 0),
+                                  child: Transform.scale(scale: 1 - 0.1 * d.abs(), child: _Orb(size: s, page: p)),
+                                ),
+                                const SizedBox(height: 28),
+                                Opacity(
+                                  opacity: textOpacity,
+                                  child: Transform.translate(
+                                    offset: Offset(d * 36, 0),
+                                    child: Column(
+                                      children: [
+                                        Tag(p.tag),
+                                        const SizedBox(height: 12),
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 28),
+                                          child: Semantics(header: true, child: Text(p.title, textAlign: TextAlign.center, style: Tx.h1(c.ink).copyWith(height: 1.12))),
+                                        ),
+                                        const SizedBox(height: 10),
+                                        Padding(padding: const EdgeInsets.symmetric(horizontal: 36), child: Text(p.body, textAlign: TextAlign.center, style: Tx.body(c.ink2).copyWith(height: 1.5))),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
                         ),
                       ),
                     );
@@ -222,36 +265,109 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 }
 
-class _Orb extends StatelessWidget {
+class _Orb extends StatefulWidget {
   const _Orb({required this.size, required this.page});
   final double size;
   final _Page page;
   @override
+  State<_Orb> createState() => _OrbState();
+}
+
+/// Idle life for each onboarding page. One finite 12 s pass (not an endless loop): the satellites drift, the core
+/// breathes, soft ripples radiate from the core, a spark orbits the orb, and the core icon has its own gesture
+/// (gift rocks, lock "clicks" shut). Page 1's number counts up from 0. Reduced motion → everything still.
+class _OrbState extends State<_Orb> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(seconds: 12));
+  bool _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started || context.reduceMotion) return;
+    _started = true;
+    _c.forward();
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final c = context.ac;
+    final reduce = context.reduceMotion;
+    final size = widget.size, page = widget.page;
     final core = size * 0.467;
     return ExcludeSemantics(
-      child: SizedBox(
-        width: size, height: size,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            Neu(radius: 999, raised: (size * 0.053, size * 0.113), width: size, height: size),
-            Neu(radius: 999, inset: (size * 0.033, size * 0.073), width: size * 0.733, height: size * 0.733),
-            Container(
-              width: core, height: core, alignment: Alignment.center,
-              decoration: const BoxDecoration(gradient: P.gradient, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Color(0x805B3BE0), offset: Offset(0, 16), blurRadius: 30)]),
-              child: page.coreIcon != null
-                  ? AcIcon(page.coreIcon!, size: core * 0.42, color: Colors.white, strokeWidth: 1.8)
-                  : Column(mainAxisSize: MainAxisSize.min, children: [
-                      Text(page.big!, style: Tx.num(core * 0.46, Tx.w8, Colors.white, -0.04, core * 0.42)),
-                      Text(page.unit!, style: Tx.label(12, Tx.w7, P.p100, 0.12)),
-                    ]),
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (_, __) {
+          final w = _c.value * math.pi * 2 * 3; // 3 slow cycles
+          final active = _c.isAnimating;
+          final env = active ? ((1 - _c.value) * 10).clamp(0.0, 1.0).toDouble() : 0.0; // fades the extras out at the end
+          final breathe = 1 + 0.018 * math.sin(w);
+
+          Widget ripple(double offset) {
+            final f = (_c.value * 6 + offset) % 1.0;
+            final d = core + (size * 0.92 - core) * Curves.easeOut.transform(f);
+            return Container(width: d, height: d, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: P.p300.withValues(alpha: (1 - f) * 0.5 * env), width: 2)));
+          }
+
+          Widget icon() {
+            final ic = AcIcon(page.coreIcon!, size: core * 0.42, color: Colors.white, strokeWidth: 1.8);
+            if (reduce) return ic;
+            if (page.coreIcon == 'gift') return Transform.rotate(angle: 0.16 * math.sin(w * 2) * env, child: ic); // rocks side to side
+            return Transform.scale(scale: 1 + 0.08 * math.max(0, math.sin(w * 2)) * env, child: ic); // lock: a soft "click" pulse
+          }
+
+          Widget bigNumber() {
+            final target = int.tryParse(page.big!) ?? 0;
+            return TweenAnimationBuilder<double>(
+              tween: Tween<double>(begin: 0, end: target.toDouble()),
+              duration: reduce ? Duration.zero : const Duration(milliseconds: 1100),
+              curve: Motion.out,
+              builder: (_, v, __) => Text('${v.round()}', style: Tx.num(core * 0.46, Tx.w8, Colors.white, -0.04, core * 0.42)),
+            );
+          }
+
+          return SizedBox(
+            width: size, height: size,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Neu(radius: 999, raised: (size * 0.053, size * 0.113), width: size, height: size),
+                Neu(radius: 999, inset: (size * 0.033, size * 0.073), width: size * 0.733, height: size * 0.733),
+                if (active) ...[ripple(0), ripple(0.5)],
+                Transform.scale(
+                  scale: breathe,
+                  child: Container(
+                    width: core, height: core, alignment: Alignment.center,
+                    decoration: const BoxDecoration(gradient: P.gradient, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Color(0x805B3BE0), offset: Offset(0, 16), blurRadius: 30)]),
+                    child: page.coreIcon != null
+                        ? icon()
+                        : Column(mainAxisSize: MainAxisSize.min, children: [
+                            bigNumber(),
+                            Text(page.unit!, style: Tx.label(12, Tx.w7, P.p100, 0.12)),
+                          ]),
+                  ),
+                ),
+                // a spark orbiting between the inner well and the rim
+                if (active)
+                  Align(
+                    alignment: Alignment(math.cos(_c.value * math.pi * 4 - math.pi / 2) * 0.8, math.sin(_c.value * math.pi * 4 - math.pi / 2) * 0.8),
+                    child: Opacity(
+                      opacity: env,
+                      child: Container(width: 10, height: 10, decoration: const BoxDecoration(shape: BoxShape.circle, gradient: P.gradient, boxShadow: [BoxShadow(color: Color(0x995B3BE0), blurRadius: 10)])),
+                    ),
+                  ),
+                Positioned(top: size * 0.12 + 5 * math.sin(w), right: size * 0.1 + 3 * math.cos(w * 0.8), child: Neu(radius: 999, raised: Elev.xs, width: 22, height: 22)),
+                Positioned(bottom: size * 0.1 + 6 * math.cos(w * 0.9), left: size * 0.15 + 4 * math.sin(w * 0.7), child: Container(width: 30, height: 30, decoration: BoxDecoration(color: P.p300, shape: BoxShape.circle, boxShadow: raisedShadows(c, Elev.xs)))),
+              ],
             ),
-            Positioned(top: size * 0.12, right: size * 0.1, child: Neu(radius: 999, raised: Elev.xs, width: 22, height: 22)),
-            Positioned(bottom: size * 0.1, left: size * 0.15, child: Container(width: 30, height: 30, decoration: BoxDecoration(color: P.p300, shape: BoxShape.circle, boxShadow: raisedShadows(c, Elev.xs)))),
-          ],
-        ),
+          );
+        },
       ),
     );
   }

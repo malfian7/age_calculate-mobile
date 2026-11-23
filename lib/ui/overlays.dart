@@ -36,19 +36,33 @@ class AcPageRoute<T> extends PageRoute<T> {
   @override
   Widget buildTransitions(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation, Widget child) {
     if (context.reduceMotion) return FadeTransition(opacity: animation, child: child);
-    final enter = CurvedAnimation(parent: animation, curve: Motion.standard, reverseCurve: Motion.standard);
-    final cover = CurvedAnimation(parent: secondaryAnimation, curve: Motion.standard, reverseCurve: Motion.standard);
+    final enter = CurvedAnimation(parent: animation, curve: Motion.drawer, reverseCurve: Motion.drawer);
+    final cover = CurvedAnimation(parent: secondaryAnimation, curve: Motion.drawer, reverseCurve: Motion.drawer);
     return AnimatedBuilder(
       animation: Listenable.merge([enter, cover]),
       child: child,
       builder: (ctx, child) {
         final w = MediaQuery.sizeOf(ctx).width;
-        final dx = (1 - enter.value) * w - cover.value * w * 0.3;
+        final e = enter.value, k = cover.value;
+        final dx = (1 - e) * w - k * w * 0.3;
+        // the page covered by a newer one recedes slightly (scale 0.96) and dims; the incoming page has a soft left-edge shadow
         return Stack(
           fit: StackFit.passthrough,
           children: [
-            Transform.translate(offset: Offset(dx, 0), child: child),
-            if (cover.value > 0) Positioned.fill(child: IgnorePointer(child: ColoredBox(color: Colors.black.withValues(alpha: 0.08 * cover.value)))),
+            Transform.translate(
+              offset: Offset(dx, 0),
+              child: Transform.scale(
+                scale: 1 - 0.04 * k,
+                child: Opacity(
+                  opacity: (0.4 + 0.6 * e).clamp(0.0, 1.0).toDouble(),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(boxShadow: e < 1 ? [BoxShadow(color: Color.fromRGBO(0, 0, 0, 0.18 * (1 - e)), blurRadius: 28, offset: const Offset(-8, 0))] : const []),
+                    child: child,
+                  ),
+                ),
+              ),
+            ),
+            if (k > 0) Positioned.fill(child: IgnorePointer(child: ColoredBox(color: Colors.black.withValues(alpha: 0.08 * k)))),
           ],
         );
       },
@@ -103,7 +117,9 @@ class AcSheetFrame extends StatelessWidget {
                   Center(child: Container(width: 44, height: 5, decoration: BoxDecoration(color: c.dark ? c.line : P.p200, borderRadius: BorderRadius.circular(3)))),
                   const SizedBox(height: 16),
                   if (title != null)
-                    Row(
+                    Stagger(
+                      index: 1, rise: 10,
+                      child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
@@ -115,8 +131,9 @@ class AcSheetFrame extends StatelessWidget {
                         NeuIconButton(icon: 'x', label: 'Close', size: 40, small: true, onPressed: onClose ?? () => Navigator.of(context).maybePop()),
                       ],
                     ),
+                    ),
                   if (title != null) const SizedBox(height: 16),
-                  child,
+                  Stagger(index: 2, rise: 14, child: child),
                 ],
               ),
             ),
@@ -483,7 +500,7 @@ Future<bool> confirmDialog(BuildContext context, {required String title, require
     barrierDismissible: true,
     barrierLabel: 'Close dialog',
     barrierColor: context.ac.scrim,
-    transitionDuration: context.reduceMotion ? const Duration(milliseconds: 120) : const Duration(milliseconds: 240),
+    transitionDuration: context.reduceMotion ? const Duration(milliseconds: 120) : const Duration(milliseconds: 280),
     pageBuilder: (ctx, a, b) {
       final c = ctx.ac;
       return Material(
@@ -524,7 +541,17 @@ Future<bool> confirmDialog(BuildContext context, {required String title, require
     transitionBuilder: (ctx, a, b, child) {
       if (ctx.reduceMotion) return FadeTransition(opacity: a, child: child);
       final enter = CurvedAnimation(parent: a, curve: Motion.out, reverseCurve: Motion.exit);
-      return FadeTransition(opacity: enter, child: ScaleTransition(scale: Tween<double>(begin: 0.96, end: 1).animate(enter), child: child));
+      return FadeTransition(
+        opacity: enter,
+        child: AnimatedBuilder(
+          animation: enter,
+          child: child,
+          builder: (_, child) => Transform.translate(
+            offset: Offset(0, 18 * (1 - enter.value)),
+            child: Transform.scale(scale: 0.93 + 0.07 * enter.value, child: child),
+          ),
+        ),
+      );
     },
   );
   return res ?? false;
@@ -569,9 +596,13 @@ class _ToastView extends StatelessWidget {
     final reduce = context.reduceMotion;
     return AnimatedSlide(
       offset: item.open || reduce ? Offset.zero : const Offset(0, 0.6),
-      duration: item.open ? Motion.moderate : const Duration(milliseconds: 160),
+      duration: item.open ? const Duration(milliseconds: 360) : const Duration(milliseconds: 160),
       curve: Motion.out,
-      child: AnimatedOpacity(
+      child: AnimatedScale(
+        scale: item.open || reduce ? 1 : 0.94,
+        duration: item.open ? const Duration(milliseconds: 360) : const Duration(milliseconds: 160),
+        curve: Motion.out,
+        child: AnimatedOpacity(
         opacity: item.open ? 1 : 0,
         duration: item.open ? Motion.moderate : const Duration(milliseconds: 160),
         curve: Motion.out,
@@ -611,6 +642,7 @@ class _ToastView extends StatelessWidget {
               ),
             ),
           ),
+        ),
         ),
       ),
     );

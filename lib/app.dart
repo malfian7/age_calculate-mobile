@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -42,6 +43,7 @@ class _AgeCalculateAppState extends State<AgeCalculateApp> {
           themeMode: app.themeMode,
           theme: buildTheme(AcColors.light),
           darkTheme: buildTheme(AcColors.darkTheme),
+          scrollBehavior: const AcScrollBehavior(),
           locale: const Locale('en', 'US'),
           supportedLocales: const [Locale('en', 'US')],
           localizationsDelegates: const [GlobalMaterialLocalizations.delegate, GlobalWidgetsLocalizations.delegate, GlobalCupertinoLocalizations.delegate],
@@ -61,6 +63,18 @@ class _AgeCalculateAppState extends State<AgeCalculateApp> {
       ),
     );
   }
+}
+
+/// One scroll feel everywhere: iOS-style rubber-band overscroll (no Android glow), content always draggable,
+/// and mouse / trackpad / stylus can drag-scroll too.
+class AcScrollBehavior extends MaterialScrollBehavior {
+  const AcScrollBehavior();
+  @override
+  ScrollPhysics getScrollPhysics(BuildContext context) => const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics());
+  @override
+  Widget buildOverscrollIndicator(BuildContext context, Widget child, ScrollableDetails details) => child;
+  @override
+  Set<PointerDeviceKind> get dragDevices => {PointerDeviceKind.touch, PointerDeviceKind.mouse, PointerDeviceKind.stylus, PointerDeviceKind.trackpad};
 }
 
 enum _Phase { splash, onboarding, shell }
@@ -97,8 +111,12 @@ class _AppRootState extends State<AppRoot> {
   Widget build(BuildContext context) {
     return AnimatedSwitcher(
       duration: Motion.of(context, const Duration(milliseconds: 300)),
-      switchInCurve: Motion.standard,
+      switchInCurve: Motion.out,
       switchOutCurve: Motion.standard,
+      // the arriving phase fades up from 97 % so splash → onboarding → home feels like one continuous move
+      transitionBuilder: (child, anim) => context.reduceMotion
+          ? FadeTransition(opacity: anim, child: child)
+          : FadeTransition(opacity: anim, child: ScaleTransition(scale: Tween<double>(begin: 0.97, end: 1).animate(anim), child: child)),
       child: switch (_phase) {
         _Phase.splash => SplashScreen(key: const ValueKey('splash'), onDone: _afterSplash),
         _Phase.onboarding => OnboardingScreen(

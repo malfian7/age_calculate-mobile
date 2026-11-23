@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/age.dart';
 import '../core/tokens.dart';
+import '../ui/confetti.dart';
 import '../ui/icons.dart';
 import '../ui/logo.dart';
 import '../ui/neu.dart';
@@ -155,6 +156,8 @@ class _ResultScreenState extends State<ResultScreen> {
               ),
             ],
           ),
+          // rare delight: confetti only when the birthday is today
+          if (n.isToday) const Positioned.fill(child: ConfettiBurst()),
           // swipe in from the left edge to go back
           Positioned(
             left: 0, top: 0, bottom: 0, width: 20,

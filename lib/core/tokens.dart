@@ -83,6 +83,7 @@ abstract final class Motion {
   static const Curve standard = Cubic(0.2, 0, 0, 1); // state changes, page push
   static const Curve drawer = Cubic(0.32, 0.72, 0, 1); // sheets
   static const Curve exit = Cubic(0.4, 0, 1, 1);
+  static const Curve spring = Cubic(0.34, 1.56, 0.64, 1); // small overshoot - selection pops, playful moments only
 
   /// Reduced motion keeps the information but drops movement: durations collapse to a short fade.
   static Duration of(BuildContext c, Duration d) => c.reduceMotion ? (d == Duration.zero ? d : const Duration(milliseconds: 1)) : d;

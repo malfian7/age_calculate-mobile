@@ -79,6 +79,19 @@ assets/icon              app icon and Android adaptive foreground
 - English only (`locale: en_US`): numbers like `1,474`, dates like `Aug 14, 1998` (short) and `Friday, August 14, 1998` (long), durations like `28 years, 3 months, 5 days`, compact `56y 8mo`.
 - History categories are stored as `Family`, `Friends`, `Work` and `Personal`. Entries saved by earlier (Indonesian) builds are migrated on load.
 
+## Extra motion (added later, not yet run on a device)
+
+- Splash: a pulse ring radiates from the logo once it lands.
+- Onboarding: parallax between pages (orb faster, text slower and fading) and idle drift/breathing on the orb (one finite 12 s pass).
+- Tabs: content drifts 14 px in the direction of travel while cross-fading; the selected icon pops with a small overshoot (`Motion.spring`).
+- Result: a glowing knob rides the tip of the age ring while it draws; confetti (`lib/ui/confetti.dart`) fires only when the birthday is today.
+- Onboarding orb (one finite 12 s pass): ripples radiate from the core, a spark orbits the rim, the gift rocks, the lock "clicks", and "28" counts up.
+- Hover (mouse / trackpad / stylus) lifts every pressable 1.5 % over 150 ms; pointer cursor on tappables.
+- Pages: push/pop uses the iOS-like drawer curve, the covered page recedes (scale 0.96 + dim), the incoming page fades in with a soft edge shadow. Splash → onboarding → home scale-fades from 97 %.
+- Scroll: one `AcScrollBehavior` (rubber-band overscroll everywhere, mouse/trackpad drag).
+- Popups: sheet title and content settle in after the panel (stagger), dialog rises 18 px and scales from 93 %, toasts scale in.
+- All of it is skipped or reduced when the system "reduce motion" setting is on.
+
 ## Not done yet
 
 Real birthday reminder notifications, other languages, and release builds (Android signing, iOS provisioning).

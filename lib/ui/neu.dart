@@ -158,7 +158,7 @@ class NeuPressable extends StatefulWidget {
 }
 
 class _NeuPressableState extends State<NeuPressable> {
-  bool _down = false, _focus = false;
+  bool _down = false, _focus = false, _hover = false;
 
   void _set(bool v) {
     if (widget.onTap == null && widget.onLongPress == null) return;
@@ -204,6 +204,14 @@ class _NeuPressableState extends State<NeuPressable> {
         );
       },
     );
+    // hover: a 1.5 % lift eased over 150 ms; released while pressed so press and hover never fight
+    body = TweenAnimationBuilder<double>(
+      tween: Tween<double>(end: !reduce && _hover && !_down ? 1 : 0),
+      duration: reduce ? Duration.zero : Motion.fast,
+      curve: Motion.out,
+      child: body,
+      builder: (_, h, child) => Transform.scale(scale: 1 + 0.015 * h, child: child),
+    );
     body = GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTapDown: enabled ? (_) => _set(true) : null,
@@ -220,6 +228,8 @@ class _NeuPressableState extends State<NeuPressable> {
     );
     body = FocusableActionDetector(
       enabled: enabled,
+      mouseCursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
+      onShowHoverHighlight: (v) => setState(() => _hover = v),
       onShowFocusHighlight: (v) => setState(() => _focus = v),
       actions: {ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) {
         _tap();

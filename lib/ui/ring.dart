@@ -61,6 +61,13 @@ class _RingPainter extends CustomPainter {
     if (p > 0) {
       final shader = P.gradient.createShader(const Rect.fromLTWH(0, 0, 100, 100));
       canvas.drawArc(rect, -math.pi / 2, 2 * math.pi * p, false, Paint()..style = PaintingStyle.stroke..strokeWidth = sw..isAntiAlias = true..shader = shader);
+      // glowing knob riding the tip of the arc while it draws
+      if (p > 0.02) {
+        final a = -math.pi / 2 + 2 * math.pi * p;
+        final tip = Offset(50 + mid * math.cos(a), 50 + mid * math.sin(a));
+        canvas.drawCircle(tip, sw * 0.95, Paint()..color = const Color(0x665B3BE0)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5));
+        canvas.drawCircle(tip, sw * 0.34, Paint()..color = Colors.white);
+      }
     }
     canvas.restore();
   }
